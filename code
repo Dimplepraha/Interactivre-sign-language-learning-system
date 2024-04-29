@@ -1,0 +1,786 @@
+import os
+import mediapipe as mp 
+import numpy as np
+import cv2
+import pickle
+mp_holistic = mp.solutions.holistic
+holistic = mp_holistic.Holistic(min_detection_confidence=0.7, min_tracking_confidence=0.7)
+mpDraw = mp.solutions.drawing_utils
+# Path for exported data, numpy arrays
+DATA_PATH = os.path.join('../data/Gesture_Data') 
+LANDMARK_PATH = os.path.join('../data/Gesture_Landmarks')
+
+# Actions that we try to detect
+
+actions = np.array(['eat', 'friend'])
+# actions = np.array(['Hello', 'Love You', 'Understand', 'Thanks', 'Some', 'Home', 'name', 'my', 'how'])
+# actions = np.array(['Sorry', "Help me", "Yes", "No", "eat", "friend"])
+# actions = np.array([ "No", "eat"])
+
+# Thirty videos worth of data
+no_sequences =  25
+
+# Videos are going to be 30 frames in length
+sequence_length = 30
+
+# Folder start
+start_folder = 0
+for action in actions: 
+    for sequence in range(no_sequences):
+        try: 
+            os.makedirs(os.path.join(DATA_PATH, action, str(sequence)))
+            os.makedirs(os.path.join(LANDMARK_PATH, action, str(sequence)))
+        except:
+            pass
+import matplotlib.pyplot as plt
+plt.figure(figsize=(12,8))
+pkl = open('../data/Gesture_Data/eat/0/8', 'rb')
+im = pickle.load(pkl)
+im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
+plt.imshow(im)
+def mediapipe_detection(image, model):
+    image = cv2.flip(image, 1)
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB) # COLOR CONVERSION BGR 2 RGB
+    results = model.process(image)                 # Make prediction
+    image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR) # COLOR COVERSION RGB 2 BGR
+    return image, results
+
+cap = cv2.VideoCapture(0)
+
+print(actions)
+# Loop through actions
+for action in actions:
+    # Loop through sequences aka videos
+    for sequence in range(start_folder, start_folder+no_sequences): 
+        # Loop through video length aka sequence length
+        for frame_num in range(sequence_length):
+
+            _, frame = cap.read()
+            
+            # Get Camera dimensions
+            x, y, c = frame.shape
+            frame, result = mediapipe_detection(frame, holistic)
+            className = ''
+            
+            # Process the result
+            if result.left_hand_landmarks or result.right_hand_landmarks:
+                landmarks = []
+
+                # Save Landmark Lists for future processing
+                pkl_path = os.path.join(LANDMARK_PATH, action, str(sequence), str(frame_num))
+                img_path = os.path.join(DATA_PATH, action, str(sequence), str(frame_num))
+
+                with open(img_path, 'wb') as im:
+                    pickle.dump(frame, im)
+
+
+                with open(pkl_path, 'wb') as f:
+
+                    if result.left_hand_landmarks and result.right_hand_landmarks:
+                        pickle.dump({"Left":result.left_hand_landmarks, "Right":result.right_hand_landmarks, 
+                                    "Face": result.face_landmarks, "Pose": result.pose_landmarks}, f)
+
+                    elif result.left_hand_landmarks:
+                        pickle.dump({"Left":result.left_hand_landmarks, "Right":0, 
+                                    "Face": result.face_landmarks, "Pose": result.pose_landmarks}, f)
+
+                    elif result.right_hand_landmarks:
+                        pickle.dump({"Left":0, "Right":result.right_hand_landmarks, 
+                                    "Face": result.face_landmarks, "Pose": result.pose_landmarks}, f)
+
+                # lh = [[res.x, res.y] for res in result.left_hand_landmarks.landmark] if result.left_hand_landmarks else np.zeros(21*2).reshape(-1,2).tolist()
+                # rh = [[res.x, res.y] for res in result.right_hand_landmarks.landmark] if result.right_hand_landmarks else np.zeros(21*2).reshape(-1,2).tolist()
+                
+                # for i in range(len(lh)):
+                #     landmarks.append([lh[i][0], lh[i][1], rh[i][0], rh[i][1]])
+                
+                # Drawing landmarks on frames
+                mpDraw.draw_landmarks(frame, result.left_hand_landmarks, mp_holistic.HAND_CONNECTIONS) # Draw left hand connections
+                mpDraw.draw_landmarks(frame, result.right_hand_landmarks, mp_holistic.HAND_CONNECTIONS) # Draw right hand connections
+
+
+                # NEW Apply wait logic
+                if frame_num == 0: 
+                    cv2.putText(frame, 'STARTING COLLECTION', (120,200), 
+                            cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255, 0), 4, cv2.LINE_AA)
+                    cv2.putText(frame, 'Frames for {} Video Number {}'.format(action, sequence), (15,15), 
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 1, cv2.LINE_AA)
+                    # Show to screen
+                    cv2.imshow('OpenCV Feed', frame)
+                    cv2.waitKey(1000)
+                else: 
+                    cv2.putText(frame, 'Frames for {} Video Number {}'.format(action, sequence), (15,12), 
+                            -cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 1, cv2.LINE_AA)
+                    # Show to screen
+                    cv2.imshow('OpenCV Feed', frame)
+                
+                
+                # npy_path = os.path.join(DATA_PATH, action, str(sequence), str(frame_num))
+                # # npy_path = "./MP_Data/" + action + "_" + str(sequence) + "_" + str(frame_num)
+                # np.save(npy_path, landmarks)
+
+                # Break gracefully
+                if cv2.waitKey(10) & 0xFF == ord('q'):
+                    break
+                
+cap.release()
+cv2.destroyAllWindows()
+cap.release()
+cv2.destroyAllWindows()
+for (dirpath, dirnames, filenames) in os.walk(os.path.join(LANDMARK_PATH, action)):
+    if filenames != []:
+        print(dirpath, " || ", dirnames, " || ", filenames)
+# for (dirpath, dirnames, filenames) in os.walk(os.path.join('./data/MP_Data_Landmarks\ Hello/0')):
+#     print(dirpath, " || ", dirnames, " || ", filenames)
+
+with open("../data/Gesture_Landmarks/Hello/0/0", 'rb') as f:
+    temp = pickle.load(f)
+
+print(temp.keys())
+print(temp)
+mpHands = mp.solutions.hands
+hands = mpHands.Hands(max_num_hands=1, min_detection_confidence=0.7)
+mpDraw = mp.solutions.drawing_utils
+DATA_PATH = os.path.join('./data/Character_Data') 
+LANDMARK_PATH = os.path.join('./data/Character_Data_Landmarks')
+
+actions = np.array( [ chr(i) for i in range(ord('U'), ord('Y')+1) ] )
+# actions = np.array(['E'])
+print(actions)
+
+no_sequences =  25
+sequence_length = 30
+start_folder = 0
+for action in actions: 
+    for sequence in range(no_sequences):
+        try: 
+            # os.makedirs(os.path.join(DATA_PATH, action, str(sequence)))
+            os.makedirs(os.path.join(LANDMARK_PATH, action, str(sequence)))
+        except:
+            pass
+import math
+ 
+def getAngle(a, b, c):
+    ang = math.degrees(math.atan2(c[1]-b[1], c[0]-b[0]) - math.atan2(a[1]-b[1], a[0]-b[0]))
+    return ang + 360 if ang < 0 else ang
+def mediapipe_detection(image, model):
+    image = cv2.flip(image, 1)
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB) # COLOR CONVERSION BGR 2 RGB
+    results = model.process(image)                 # Make prediction
+    image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR) # COLOR COVERSION RGB 2 BGR
+    return image, results
+
+
+cap = cv2.VideoCapture(0)
+    
+# NEW LOOP
+# Loop through actions
+for action in actions:
+    # Loop through sequences aka videos
+    for sequence in range(start_folder, start_folder+no_sequences):
+        # Loop through video length aka sequence length
+        for frame_num in range(sequence_length):
+
+            _, frame = cap.read()
+
+            x, y, c = frame.shape
+            frame, result = mediapipe_detection(frame, hands)  
+            className = ''
+            
+            # post process the result
+            if result.multi_hand_landmarks:
+                landmarks = []
+
+                pkl_path = os.path.join(LANDMARK_PATH, action, str(sequence), str(frame_num))
+                with open(pkl_path, 'wb') as f:
+                    pickle.dump(result.multi_hand_landmarks, f)
+
+                for handslms in result.multi_hand_landmarks:
+                    
+                #     angle_1 = getAngle((handslms.landmark[mpHands.HandLandmark.THUMB_TIP].x, handslms.landmark[mpHands.HandLandmark.THUMB_TIP].y),
+                #                             (handslms.landmark[mpHands.HandLandmark.WRIST].x, handslms.landmark[mpHands.HandLandmark.WRIST].y),
+                #                             (handslms.landmark[mpHands.HandLandmark.PINKY_TIP].x, handslms.landmark[mpHands.HandLandmark.PINKY_TIP].y))
+
+                #     angle_2 = getAngle((handslms.landmark[mpHands.HandLandmark.INDEX_FINGER_TIP].x, handslms.landmark[mpHands.HandLandmark.INDEX_FINGER_TIP].y),
+                #                         (handslms.landmark[mpHands.HandLandmark.INDEX_FINGER_MCP].x, handslms.landmark[mpHands.HandLandmark.INDEX_FINGER_MCP].y),
+                #                         (handslms.landmark[mpHands.HandLandmark.MIDDLE_FINGER_TIP].x, handslms.landmark[mpHands.HandLandmark.MIDDLE_FINGER_TIP].y))
+
+                #     # angle_3 = getAngle((handslms.landmark[mpHands.HandLandmark.THUMB_TIP].x, handslms.landmark[mpHands.HandLandmark.THUMB_TIP].y),
+                #     #                     (handslms.landmark[mpHands.HandLandmark.WRIST].x, handslms.landmark[mpHands.HandLandmark.WRIST].y),
+                #     #                     (handslms.landmark[mpHands.HandLandmark.INDEX_FINGER_TIP].x, handslms.landmark[mpHands.HandLandmark.INDEX_FINGER_TIP].y))
+                    
+                #     for lm in handslms.landmark:
+                #         lmx = int(lm.x * x)
+                #         lmy = int(lm.y * y)
+                        
+
+                #         landmarks.append([lmx, lmy])
+                #     landmarks.append([angle_1, angle_2])
+
+                    # Drawing landmarks on frames
+                    mpDraw.draw_landmarks(frame, handslms, mpHands.HAND_CONNECTIONS)
+
+
+                # NEW Apply wait logic
+                if frame_num == 0: 
+                    cv2.putText(frame, 'STARTING COLLECTION', (120,200), 
+                            cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255, 0), 4, cv2.LINE_AA)
+                    cv2.putText(frame, 'Frames for {} Video Number {}'.format(action, sequence), (15,15), 
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 1, cv2.LINE_AA)
+                    # Show to screen
+                    cv2.imshow('OpenCV Feed', frame)
+                    cv2.waitKey(1000)
+                else: 
+                    cv2.putText(frame, 'Frames for {} Video Number {}'.format(action, sequence), (15,12), 
+                            -cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 1, cv2.LINE_AA)
+                    # Show to screen
+                    cv2.imshow('OpenCV Feed', frame)
+                
+                
+                # npy_path = os.path.join(DATA_PATH, action, str(sequence), str(frame_num))
+                # # npy_path = "./MP_Data/" + action + "_" + str(sequence) + "_" + str(frame_num)
+                # np.save(npy_path, landmarks)
+
+                # Break gracefully
+                if cv2.waitKey(10) & 0xFF == ord('q'):
+                    break
+                
+cap.release()
+cv2.destroyAllWindows()
+cap.release()
+cv2.destroyAllWindows()
+for (dirpath, dirnames, filenames) in os.walk(os.path.join(LANDMARK_PATH, action)):
+    if filenames != []:
+        print(dirpath, " || ", dirnames, " || ", filenames)
+with open(LANDMARK_PATH + "/A/0/0", 'rb') as f:
+    temp = pickle.load(f)
+
+print(temp)
+from tensorflow.keras.models import load_model
+import tensorflowjs as tfjs
+
+model = load_model('../model_saves/checkpoints/alphabets_Z_model')
+print("Model: ", model)
+tfjs.converters.save_keras_model(model, "../model_saves/tensorflowjs_model")
+list_of_files = {}
+# MP_Data for gestures, MP_Data_Char for Alphabets
+for (dirpath, dirnames, filenames) in os.walk("./data/MP_Data_Char_Test"):
+    # print(dirpath, "\n", dirnames, "\n", len(filenames))
+    if(len(filenames)!=30):
+         print(dirpath, "\n", len(filenames))
+with open("../signs/alphabets.pkl",'rb') as f:
+    actions = pickle.load(f)
+
+print(actions)
+actions = [chr(i) for i in range(ord('A'), ord('Y')+1) if chr(i)!="T" and chr(i)!="Z"]
+print(actions)
+with open("../signs/gestures.pkl",'rb') as f:
+    actions = pickle.load(f)
+print(actions)
+actions = np.array(['Hello', 'Love You', 'Understand', 'Thanks', 'Some', 'Home', 'name', 'my', 'how', 'Sorry', "Help me", "Yes", "No", "eat", "friend"])
+# actions = np.array(['Sorry', "Help me", "Yes", "No", "eat", "friend"])
+label_map = {label:num for num, label in enumerate(actions)}
+print(label_map)
+data = []
+labels = []
+
+for action in actions:
+    for (dirpath, dirnames, filenames) in os.walk(os.path.join("../data/Gesture_Landmarks", action)):
+        if(len(dirnames)==0):
+            # print(dirpath, filenames)
+            for filename in filenames:
+                data.append(np.load( os.path.join(dirpath, filename), allow_pickle=True ))
+                labels.append(label_map[action])
+
+data = np.array(data)
+labels = np.array(labels)
+print(data.shape)
+print(labels.shape)
+unique, counts = np.unique(labels, return_counts=True)
+print(dict(zip(unique, counts)))
+# from tensorflow.keras.utils.np_utils import to_categorical
+import tensorflow as tf
+
+lab = tf.keras.utils.to_categorical(labels)
+print(lab.shape)
+from sklearn.model_selection import train_test_split
+
+X_train, X_test, y_train, y_test = train_test_split(data, lab, test_size=0.2, random_state=42)
+
+unique, counts = np.unique(np.argmax(y_train, axis=1), return_counts=True)
+print("Training: ", dict(zip(unique, counts)))
+unique, counts = np.unique(np.argmax(y_test, axis=1), return_counts=True)
+print("Test: ", dict(zip(unique, counts)))
+
+print("Training: ", X_train.shape, y_train.shape)
+print("Test: ", X_test.shape, y_test.shape)
+import tensorflow as tf
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Flatten, Dropout, LSTM
+
+from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping
+import tensorflow as tf
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Flatten, Dropout, LSTM
+model = Sequential([
+    Flatten(input_shape=(X_train.shape[1], X_train.shape[2])),
+    Dense(64, activation='relu'),
+    Dense(128, activation='relu'),
+    Dense(512, activation='relu'),
+    Dense(512, activation='relu'),
+    Dropout(rate=0.2),
+    Dense(64, activation='relu'),
+    Dense(32, activation='relu'),
+    Dense(y_train.shape[1], activation='softmax'),
+])
+
+model.summary()
+model = Sequential([
+    Flatten(input_shape=(X_train.shape[1], X_train.shape[2])),
+    Dense(64, activation='relu'),
+    Dense(128, activation='relu'),
+    Dense(512, activation='relu'),
+    Dense(512, activation='relu'),
+    Dropout(rate=0.2),
+    Dense(64, activation='relu'),
+    Dense(32, activation='relu'),
+    Dense(y_train.shape[1], activation='softmax'),
+])
+
+model.summary()
+callback_checkpoint = ModelCheckpoint(
+    './checkpoints/', monitor='val_loss', verbose=0, save_best_only=True,
+    save_weights_only=True, mode='auto', save_freq='epoch',
+)
+callback_loss = EarlyStopping(monitor='loss', patience=4)
+
+model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+history = model.fit(X_train, y_train, 
+                    epochs=50, 
+                    callbacks=[callback_checkpoint, callback_loss])
+# model.save("./checkpoints/alphabets_angles_model_2")
+model.save("./checkpoints/gesture_15_model_v2")
+from sklearn.metrics import classification_report, confusion_matrix
+import matplotlib.pyplot as plt
+import seaborn as sns
+from tensorflow.keras.models import load_model
+model = load_model("checkpoints/two_hand_9_model")
+# model = load_model("checkpoints/alphabets_Z_model")
+y_pred = model.predict(X_test)
+y_preds = np.argmax(y_pred, axis=1)
+
+unique, counts = np.unique(y_preds, return_counts=True)
+print(dict(zip(unique, counts)))
+def evaluate_model(history, X_test, y_test, model, title):
+  """
+    Input: 
+      history - Model history variable
+      X_test - Test features
+      y_test - Target test variables
+      model - Keras Model 
+
+    Output:
+      Accuracy Plot (Training + Validation)
+      Loss Plot (Training + Validation)
+      Confusion matrix
+      Accuracy
+      Classification Report
+  """  
+  scores = model.evaluate((X_test),y_test, verbose=0)
+  
+  fig, axs = plt.subplots(1,3, figsize=(28,9))
+  fig.tight_layout()
+
+  axs[0].plot(history.history['accuracy'])
+  axs[0].set_xlabel('Epoch')
+  axs[0].set_ylabel('Accuracy')
+  axs[0].set_title('Model - Accuracy (' + title +")")
+  axs[0].legend(['Training'], loc='lower right')
+
+  axs[1].plot(history.history['loss'])
+  axs[1].set_xlabel('Epoch')
+  axs[1].set_ylabel('Model Loss')
+  axs[1].set_title('Model - Loss (' + title +")")
+  axs[1].legend(['Training'], loc='upper right')
+
+  target_names=actions
+  
+  y_true=[]
+  for element in y_test:
+      y_true.append(np.argmax(element))
+  prediction_proba = model.predict(X_test)
+  prediction = np.argmax(prediction_proba,axis=1)
+  cnf_matrix = confusion_matrix(y_true, prediction)    
+  g = sns.heatmap(cnf_matrix, annot=True, cmap='Blues', fmt='g', ax=axs[2],
+                  xticklabels=target_names, yticklabels=target_names)
+  plt.show()
+
+  print("\nAccuracy: %.2f%% \n" % (scores[1]*100))
+  print(classification_report(y_true, prediction, target_names=target_names))
+evaluate_model(history, X_test, y_test, model, title="Gestures")
+evaluate_model(history, X_test, y_test, model, title="Gestures")
+evaluate_model(history, X_test, y_test, model, title="Alphabets")
+# Import necessary packages
+import cv2
+import numpy as np
+import pickle
+import mediapipe as mp
+import tensorflow as tf
+from tensorflow.keras.models import load_model
+
+# Initialize mediapipe
+mp_holistic = mp.solutions.holistic
+holistic = mp_holistic.Holistic(min_detection_confidence=0.7, min_tracking_confidence=0.7)
+mpDraw = mp.solutions.drawing_utils
+
+# Load the gesture recognizer model
+model = load_model('../model_saves/gesture_15_model')
+
+# Load class names
+# with open('../signs/gestures.pkl','rb') as f:
+#     actions = pickle.load(f)
+# actions = np.array(['Hello', 'Love You', 'Understand', 'Thanks', 'Some', 'Home', 'name', 'my', 'how', 'Sorry', "Help me", "Yes", "No", "eat", "friend"])
+actions = np.array(['eat', 'friend', 'Hello', 'Help me', 'Home', 'how', 'Love You', 'my', 'name', 'No', 'Some', 'Sorry', 'Thanks', 'Understand', 'Yes'])
+print(actions)
+
+sentence = []
+predictions = []
+
+def mediapipe_detection(image, model):
+    image = cv2.flip(image, 1)
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB) # COLOR CONVERSION BGR 2 RGB
+    results = model.process(image)                 # Make prediction
+    image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR) # COLOR COVERSION RGB 2 BGR
+    return image, results
+
+colors = [(245,117,16), (117,245,16), (16,117,245)]
+
+def prob_viz(res, actions, input_frame, colors):
+    output_frame = input_frame.copy()
+    for num, prob in enumerate(res):
+        cv2.rectangle(output_frame, (0,60+num*28), (int(prob*100), 90+num*28), colors[1], -1)
+        cv2.putText(output_frame, actions[num], (0, 85+num*28), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255,255,255), 2, cv2.LINE_AA)
+        
+    return output_frame
+
+# Initialize the webcam
+cap = cv2.VideoCapture(0)
+
+while True:
+
+    # Read each frame from the webcam
+    _, frame = cap.read()
+    x, y, c = frame.shape
+    frame, result = mediapipe_detection(frame, holistic)
+    className = ''
+
+    # Process the result
+    if result.left_hand_landmarks or result.right_hand_landmarks:
+        landmarks = []
+
+        lh = [[res.x, res.y] for res in result.left_hand_landmarks.landmark] if result.left_hand_landmarks else np.zeros(21*2).reshape(-1,2).tolist()
+        rh = [[res.x, res.y] for res in result.right_hand_landmarks.landmark] if result.right_hand_landmarks else np.zeros(21*2).reshape(-1,2).tolist()
+        
+        for i in range(len(lh)):
+            landmarks.append([lh[i][0], lh[i][1], rh[i][0], rh[i][1]])
+        
+        # Drawing landmarks on frames
+        mpDraw.draw_landmarks(frame, result.left_hand_landmarks, mp_holistic.HAND_CONNECTIONS) # Draw left hand connections
+        mpDraw.draw_landmarks(frame, result.right_hand_landmarks, mp_holistic.HAND_CONNECTIONS) # Draw right hand connections
+
+
+        # Predict gesture
+        prediction = model.predict([landmarks])
+        classID = np.argmax(prediction)
+        predictions.append(classID)
+        className = actions[classID]
+
+        if np.unique(predictions[-20:])[0] == classID: 
+                if prediction[0][classID] > 0.7: 
+                    
+                    if len(sentence) > 0: 
+                        if actions[classID] != sentence[-1]:
+                            sentence.append(actions[classID])
+                    else:
+                        sentence.append(actions[classID])
+
+        if len(sentence) > 4: 
+            sentence = sentence[-4:]
+        
+
+        frame = prob_viz(prediction[0], actions, frame, colors)
+
+    if cv2.waitKey(1) == ord('r'):
+            if(len(sentence)!=0):
+                sentence.pop()
+            # print("Popped: ", sentence)
+            
+    # show the prediction on the frame
+    cv2.rectangle(frame, (0,0), (640, 40), (255, 140, 51), -1)
+    cv2.putText(frame, ' '.join(sentence), (3,30), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
+    cv2.putText(frame, className, (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 
+                   1, (0,0,255), 2, cv2.LINE_AA)
+
+    # Show the final output
+    cv2.imshow("Output", frame) 
+
+    if cv2.waitKey(1) == ord('q'):
+        break
+
+# release the webcam and destroy all active windows
+cap.release()
+
+cv2.destroyAllWindows()
+cap.release()
+
+cv2.destroyAllWindows()
+import cv2
+import numpy as np
+import math
+import pickle
+import mediapipe as mp
+import tensorflow as tf
+from tensorflow.keras.models import load_model
+
+# initialize mediapipe
+mpHands = mp.solutions.hands
+hands = mpHands.Hands(max_num_hands=1, min_detection_confidence=0.7)
+mpDraw = mp.solutions.drawing_utils
+
+# Load the gesture recognizer model
+model = load_model('../model_saves//checkpoints/alphabets_Z_model')
+
+# Load class names
+with open("../signs/alphabets.pkl", 'rb') as f:
+    actions = pickle.load(f)
+actions = [chr(i) for i in range(ord('A'), ord('Y')+1) if chr(i)!="S" and chr(i)!="T"]
+print(actions)
+
+sentence = []
+predictions = []
+
+def mediapipe_detection(image, model):
+    image = cv2.flip(image, 1)
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB) # COLOR CONVERSION BGR 2 RGB
+    results = model.process(image)                 # Make prediction
+    image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR) # COLOR COVERSION RGB 2 BGR
+    return image, results
+
+
+def getAngle(a, b, c):
+    ang = math.degrees(math.atan2(c[1]-b[1], c[0]-b[0]) - math.atan2(a[1]-b[1], a[0]-b[0]))
+    return ang + 360 if ang < 0 else ang
+
+
+colors = [(245,117,16), (117,245,16), (16,117,245)]
+
+def prob_viz(res, actions, input_frame, colors):
+    output_frame = input_frame.copy()
+    for num, prob in enumerate(res):
+        cv2.rectangle(output_frame, (0,60+num*40), (int(prob*100), 90+num*40), colors[1], -1)
+        cv2.putText(output_frame, actions[num], (0, 85+num*40), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,255,255), 2, cv2.LINE_AA)
+        
+    return output_frame
+
+
+# Initialize the webcam
+cap = cv2.VideoCapture(0)
+
+while True:
+
+    # Read each frame from the webcam
+    _, frame = cap.read()
+    x, y, c = frame.shape
+
+    frame, result = mediapipe_detection(frame, hands)
+    className = ''
+
+    # post process the result
+    if result.multi_hand_landmarks:
+        landmarks = []
+        for handslms in result.multi_hand_landmarks:
+
+            angle_1 = getAngle((handslms.landmark[mpHands.HandLandmark.THUMB_TIP].x, handslms.landmark[mpHands.HandLandmark.THUMB_TIP].y),
+                                            (handslms.landmark[mpHands.HandLandmark.WRIST].x, handslms.landmark[mpHands.HandLandmark.WRIST].y),
+                                            (handslms.landmark[mpHands.HandLandmark.PINKY_TIP].x, handslms.landmark[mpHands.HandLandmark.PINKY_TIP].y))
+
+            angle_2 = getAngle((handslms.landmark[mpHands.HandLandmark.INDEX_FINGER_TIP].x, handslms.landmark[mpHands.HandLandmark.INDEX_FINGER_TIP].y),
+                                        (handslms.landmark[mpHands.HandLandmark.INDEX_FINGER_MCP].x, handslms.landmark[mpHands.HandLandmark.INDEX_FINGER_MCP].y),
+                                        (handslms.landmark[mpHands.HandLandmark.MIDDLE_FINGER_TIP].x, handslms.landmark[mpHands.HandLandmark.MIDDLE_FINGER_TIP].y))
+            
+            for lm in handslms.landmark:
+                # print(id, lm)
+                lmx = int(lm.x * x)
+                lmy = int(lm.y * y)
+
+                landmarks.append([lmx, lmy])
+
+            # landmarks.append([angle_1, angle_2])
+            
+            # Drawing landmarks on frames
+            mpDraw.draw_landmarks(frame, handslms, mpHands.HAND_CONNECTIONS)
+
+            # Predict gesture
+            prediction = model.predict([landmarks])
+            classID = np.argmax(prediction)
+            predictions.append(classID)
+            className = actions[classID]
+
+            if np.unique(predictions[-20:])[0] == classID: 
+                if prediction[0][classID] > 0.7: 
+                    
+                    if len(sentence) > 0: 
+                        if actions[classID] != sentence[-1]:
+                            sentence.append(actions[classID])
+                    else:
+                        sentence.append(actions[classID])
+
+            if len(sentence) > 15: 
+                sentence = sentence[-15:]
+            
+            frame = prob_viz(prediction[0], actions, frame, colors)
+    
+    if cv2.waitKey(1) == ord('r'):
+            if len(sentence) > 0:
+                sentence.pop()
+
+    # show the prediction on the frame
+    cv2.rectangle(frame, (0,0), (640, 40), (255, 140, 51), -1)
+    cv2.putText(frame, ' '.join(sentence), (3,30), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
+    cv2.putText(frame, className, (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 
+                   1, (0,0,255), 2, cv2.LINE_AA)
+
+    # Show the final output
+    cv2.imshow("Output", frame) 
+
+    if cv2.waitKey(1) == ord('q'):
+        break
+
+# release the webcam and destroy all active windows
+cap.release()
+cv2.destroyAllWindows()
+import cv2
+import numpy as np
+import math
+import pickle
+import mediapipe as mp
+import tensorflow as tf
+from tensorflow.keras.models import load_model
+
+# initialize mediapipe
+# mpHands = mp.solutions.hands
+# hands = mpHands.Hands(max_num_hands=1, min_detection_confidence=0.7)
+# mpDraw = mp.solutions.drawing_utils
+
+mp_holistic = mp.solutions.holistic # Holistic model
+holistic = mp_holistic.Holistic(min_detection_confidence=0.7, min_tracking_confidence=0.7)
+mp_drawing = mp.solutions.drawing_utils
+
+# Load the gesture recognizer model
+model = load_model('../model_saves//checkpoints/alphabets_Z_model')
+
+# Load class names
+with open("../signs/alphabets.pkl", 'rb') as f:
+    actions = pickle.load(f)
+actions = [chr(i) for i in range(ord('A'), ord('Y')+1) if chr(i)!="S" and chr(i)!="T"]
+print(actions)
+
+sentence = []
+predictions = []
+
+def mediapipe_detection(image, model):
+    image = cv2.flip(image, 1)
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB) # COLOR CONVERSION BGR 2 RGB
+    results = model.process(image)                 # Make prediction
+    image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR) # COLOR COVERSION RGB 2 BGR
+    return image, results
+
+
+def getAngle(a, b, c):
+    ang = math.degrees(math.atan2(c[1]-b[1], c[0]-b[0]) - math.atan2(a[1]-b[1], a[0]-b[0]))
+    return ang + 360 if ang < 0 else ang
+
+
+colors = [(245,117,16), (117,245,16), (16,117,245)]
+
+def prob_viz(res, actions, input_frame, colors):
+    output_frame = input_frame.copy()
+    for num, prob in enumerate(res):
+        cv2.rectangle(output_frame, (0,60+num*40), (int(prob*100), 90+num*40), colors[1], -1)
+        cv2.putText(output_frame, actions[num], (0, 85+num*40), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,255,255), 2, cv2.LINE_AA)
+        
+    return output_frame
+
+
+# Initialize the webcam
+cap = cv2.VideoCapture(0)
+
+while True:
+
+    # Read each frame from the webcam
+    _, frame = cap.read()
+    x, y, c = frame.shape
+
+    frame, result = mediapipe_detection(frame, holistic)
+    className = ''
+
+    # post process the result
+    if result.left_hand_landmarks or result.right_hand_landmarks:
+        landmarks = []
+
+        if result.left_hand_landmarks:
+            landmarks = [[res.x * x, res.y * y] for res in result.left_hand_landmarks.landmark]
+            print("Left hand")
+        elif result.right_hand_landmarks:
+            landmarks = [[res.x * x, res.y * y] for res in result.right_hand_landmarks.landmark]
+            print("Right hand")
+
+        
+        # Drawing landmarks on frames
+        mpDraw.draw_landmarks(frame, result.left_hand_landmarks, mp_holistic.HAND_CONNECTIONS) # Draw left hand connections
+        mpDraw.draw_landmarks(frame, result.right_hand_landmarks, mp_holistic.HAND_CONNECTIONS) # Draw right hand connections
+
+        # Predict gesture
+        prediction = model.predict([landmarks])
+        classID = np.argmax(prediction)
+        predictions.append(classID)
+        className = actions[classID]
+
+        if np.unique(predictions[-20:])[0] == classID: 
+            if prediction[0][classID] > 0.7: 
+                
+                if len(sentence) > 0: 
+                    if actions[classID] != sentence[-1]:
+                        sentence.append(actions[classID])
+                else:
+                    sentence.append(actions[classID])
+
+        if len(sentence) > 15: 
+            sentence = sentence[-15:]
+        
+        frame = prob_viz(prediction[0], actions, frame, colors)
+    
+    if cv2.waitKey(1) == ord('r'):
+            if len(sentence) > 0:
+                sentence.pop()
+
+    # show the prediction on the frame
+    cv2.rectangle(frame, (0,0), (640, 40), (255, 140, 51), -1)
+    cv2.putText(frame, ' '.join(sentence), (3,30), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
+    cv2.putText(frame, className, (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 
+                   1, (0,0,255), 2, cv2.LINE_AA)
+
+    # Show the final output
+    cv2.imshow("Output", frame) 
+
+    if cv2.waitKey(1) == ord('q'):
+        break
+
+# release the webcam and destroy all active windows
+cap.release()
+cv2.destroyAllWindows()
+cap.release()
+cv2.destroyAllWindows()
